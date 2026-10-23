@@ -1,0 +1,21 @@
+{
+  "name": "auditor-zk-skills",
+  "owner": {
+    "name": "stephenyang21"
+  },
+  "metadata": {
+    "description": "Security-audit skills for codebases, smart contracts and Circom ZK circuits"
+  },
+  "plugins": [
+    {
+      "name": "auditor-zk-skills",
+      "description": "unified-security-audit (Cloudflare workflow + Pashov Solidity agents, x-ray, fizz) and circom-auditor",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/unified-security-audit",
+        "./skills/circom-auditor"
+      ]
+    }
+  ]
+}
