@@ -73,6 +73,21 @@ Vault:withdraw:rounding-direction or api:POST-/users/:id:idor). Never put a line
 number, agent, wave, or severity in it.
 ```
 
+## Mindsets
+
+Give each hunter one mindset in its role line, and rotate mindsets across the hunters that cover the same high-priority component:
+
+| Mindset | Core question |
+|---|---|
+| **Attacker** | How do I take value or privilege I should not have? |
+| **Accountant** | Trace every unit of value: do the numbers add up on every path? |
+| **Spec auditor** | Does the code do what the docs, comments, standards (EIPs, RFCs), and interface promises say? |
+| **Edge-case hunter** | What breaks at zero, max, empty, first, last, self-referential, reentrant, or concurrent? |
+
+When two or more mindsets or lenses independently produce the same fingerprint, record the convergence on the candidate. A single-source candidate is not weaker evidence, but its skeptic should look harder at Gate A.
+
+Every hunter, whatever its mindset, opens each function with seven questions: **purpose** (what invariant does this protect; what breaks without it), **ordering** (can operations be reordered into an inconsistent state), **consistency** (why does a sibling have a guard this one lacks), **assumptions** (what is trusted implicitly), **boundaries** (first, last, double call, empty, max), **return values** (what persists on revert or failure), and **external calls** (what can happen between the call and the next line).
+
 ## Result contract
 
 ```json
@@ -95,6 +110,17 @@ number, agent, wave, or severity in it.
 ```
 
 Every assigned unit appears exactly once. The parent copies the dispositions into `coverage.json` and moves expected evidence files from scratch into `evidence/<agent>/`. Only regular files are moved: never symlinks or directories, never by glob, and each file must be under its size bound. The parent re-runs the checker and seeds `uncovered` entries as new units. A malformed result leaves its units `planned` for reassignment.
+
+## Per-component pass (`standard` and `deep`)
+
+Whole-codebase hunters spend their attention on the two or three most interesting files and skim the rest. After the main waves, run one hunter per **component cluster** at maximum depth:
+
+- Group files along inheritance and composition: a base and its derived contracts or classes belong together, since a "missing" check often lives in the parent. Cap a cluster at about 1,500 lines and split larger ones at a logical boundary.
+- Rank clusters by risk score (`coverage.md` § Ranking). If the budget cannot reach every cluster, record which files got no dedicated pass. Never imply that they were covered.
+- Each cluster hunter gets the exclusion list (below) and walks every function for: state completeness on every path, what each branch writes and what it leaves stale, boundary values for every parameter, and pairing (every encode/lock/normalize against its decode/unlock/denormalize).
+- Record cluster-pass checks on the existing units, or seed new units for what they find.
+
+**Exclusion rule (recall-safe).** A hunter may skip a bug as already known **only** by citing a concrete entry in the list: a real fingerprint or a real `file:line`. Each exclusion carries its own one-line content and its referent. A bug the hunter *believes* is known but cannot find in the list must be reported as new. When in doubt, report it; deduplication happens in Step 4.
 
 ## Passes (`deep`)
 

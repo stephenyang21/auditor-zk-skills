@@ -67,6 +67,8 @@ Thorough and literal; check every item and report each result after tracing impa
 - Start at sinks and side effects and work backward through controls; start at entry points and work forward through transformations. Meet in the middle.
 - For every control, find the parallel path that reaches the same effect: batch, admin/force, legacy, retry, async/queued, import, migration, error handler. The strongest control must apply after inputs are final and before every effect.
 - Compare each component's actual guarantee with what the next component assumes.
+- Treat masking code as a lead: clamps to zero, swallowed exceptions, `min`/`max` caps, and early returns that exist because a value "shouldn't" be out of range. Ask which invariant broke to make that code necessary, and whether an attacker can drive it.
+- Run a "what's missing" sweep: inverse operations (set/unset, grant/revoke, lock/unlock), restriction coverage on every exit path, paired validation (create validates; does update?), and safe behavior when a parameter changes under existing state.
 
 ## Validation rules (apply before reporting ANY finding here)
 

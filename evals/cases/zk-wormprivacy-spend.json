@@ -1,0 +1,32 @@
+{
+  "id": "zk-wormprivacy-spend",
+  "skill": "security-auditor",
+  "domain": "zk-circom",
+  "source": {
+    "repo_url": "https://github.com/zksecurity/zkbugs",
+    "ref": "main",
+    "path": "dataset/circom/worm-privacy/proof-of-burn/koukyosyumei_spend_missing_range_check",
+    "license_note": "zkbugs dataset; ground truth adapted from zkSecurity circom-auditor benchmarks (MIT)"
+  },
+  "sanitize": [
+    "README.md",
+    "zkbugs_config.json",
+    "zkbugs_*.sh"
+  ],
+  "ground_truth": [
+    {
+      "id": "H-1",
+      "severity": "high",
+      "scope": "Spend",
+      "keywords": [
+        "range",
+        "comparator",
+        "lessthan",
+        "less than",
+        "balance",
+        "overflow"
+      ],
+      "summary": "Spend feeds balance into a comparator without a range check, so a field-wrapped value passes the comparison."
+    }
+  ]
+}

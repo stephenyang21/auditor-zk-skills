@@ -2,7 +2,7 @@
 
 #### When to use this file
 
-Reach for this file for zero-knowledge circuits: Circom templates first, and the same ideas carry over to Noir, Halo2, gnark, and other R1CS/PLONKish circuits. Also use it for the on-chain verifier and the host code that builds public inputs. The threat model is a **malicious prover**: anyone may supply any witness, and only the constraints stand in the way. Distilled from the `circom-auditor` skill in this repository, which has the full 48-vector catalog under `skills/circom-auditor/references/attack-vectors/`. For a dedicated Circom pass, run that skill.
+Reach for this file for zero-knowledge circuits: Circom templates first, and the same ideas carry over to Noir, Halo2, gnark, and other R1CS/PLONKish circuits. Also use it for the on-chain verifier and the host code that builds public inputs. The threat model is a **malicious prover**: anyone may supply any witness, and only the constraints stand in the way. Distilled from zkSecurity's `circom-auditor` (MIT, © 2026 zkSecurity; included in this repository), which has the full 48-vector catalog under `skills/circom-auditor/references/attack-vectors/`. For a dedicated Circom pass, run that skill.
 
 ## Core discipline (include in every hunter prompt that uses this file)
 

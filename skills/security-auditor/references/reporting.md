@@ -39,8 +39,9 @@ Identifiers, code, diffs, bug-class labels, and fingerprints are written exactly
 3. **Confirmed findings table**: severity, title, boundary crossed, and the one-line observed result.
 4. **Each confirmed finding**: title line; location (`file:line` of the root cause); description; lower-trust actor; conditions; minimal reproduction and observed result; impact and priority rationale; the fix as a diff when it is small, plus the regression test; the variant note from Step 5.
 5. **Needs validation table**: title, trace, exact blocker, local next step, and owner-observed check. No severity.
-6. **Hardening notes** and positive patterns, kept separate from findings.
-7. **Coverage**: unit counts per status, important exclusions and deferrals, the final critic result, and the statement that no single run exhausts a target.
+6. **Worth manual review**: records revived by the revival review (`verification.md` § Revival) that a fresh skeptic could not settle. Each one gets a title, its trace, the original rejection reason, and the revival argument. These are not findings and carry no severity.
+7. **Hardening notes** and positive patterns, kept separate from findings.
+8. **Coverage**: unit counts per status, important exclusions and deferrals, the final critic result, and the statement that no single run exhausts a target.
 
 A clean run may have zero confirmed findings. Say so, with the coverage limits, and do not invent low-severity findings to fill the report.
 

@@ -30,6 +30,15 @@
       "license": "MIT AND CC-BY-SA-4.0"
     },
     {
+      "name": "krait",
+      "description": "Zealynx Krait checklist: quick scans, full framework assessments and single-check deep dives against 845 checks across 39 DeFi verticals (/krait:scan, /krait:assess, /krait:check)",
+      "source": "./third_party/krait/checklist",
+      "license": "MIT",
+      "author": {
+        "name": "Zealynx Security"
+      }
+    },
+    {
       "name": "audit-context-building",
       "description": "Understand a codebase before looking for bugs in it. Reads it function by function, records what each one assumes and depends on, and saves the write-ups to files instead of filling up the conversation.",
       "version": "2.0.2",

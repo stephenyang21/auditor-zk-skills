@@ -1,0 +1,480 @@
+# Krait Methodology — Full Detection Pipeline
+
+This document describes exactly how Krait finds vulnerabilities. Every technique here was derived from real missed findings in blind shadow audits against Code4rena contests, then validated by measuring precision/recall improvements.
+
+Current version: **v8.2** (kill-gate parity, Impact Premise, second-pass recall stages).
+**Measured baseline: v8** (50 contests, 100% precision, 15.2% recall). v8.1 and v8.2 are
+unmeasured — see [Unvalidated since the v8 baseline](#-unvalidated-since-the-v8-baseline).
+
+> **v8.2 changes**
+>
+> - **Kill-gate parity (P0)**: the 8 kill gates, the DoS exception and the 10 FP patterns now exist in the TypeScript CLI critic (`src/agents/critic.ts`), not just the skill. Previously the CLI ran a generic skeptical-reviewer prompt with none of them, while the shadow-audit harness — which runs the CLI — was the source of the published precision numbers. Gate attribution is enforced in code (`enforceGateContract`), not just requested in the prompt, and a parity test suite fails the build when the two surfaces drift.
+> - **Impact Premise gate (A3)**: every candidate must carry a one-sentence harm statement — WHO loses WHAT — before any trace is attempted. Mechanism statements ("the function is callable", "state is corrupted") are killed under Gate D as `MECHANISM-ONLY`. The reviewer treats that kill class as its highest-yield revival target, because it is a description failure rather than a disproof.
+> - **Rescan pass (B4)** and **Per-contract pass (B3)**: two exclusion-list-driven recall phases between detection and state analysis. Rescan counters attention saturation (broad second pass told what pass 1 found); per-contract counters attention dilution (one agent per inheritance cluster). Both feed the same kill gates.
+> - **Trust-assumption downgrade (A5)**: a finding that survives gate E but still depends on a semi-trusted role is reported one tier lower with an explicit note, instead of being discarded.
+> - **Root-cause consolidation (A7)**: findings sharing a severity tier, class and fix collapse into one finding with a locations table.
+> - **Detector prompt: 767 → 613 lines**, with the heuristic catalogue extracted to `detector/heuristics-core.md`. v7 measured that shrinking this file improves instruction adherence; it had since grown back past the threshold.
+
+> **v8.1 changes (Tier A — methodology audit trail)**: Added six structured fields to every detector / state-auditor / critic finding so the model shows its work to downstream agents and so future chain analysis (D2) can match preconditions to postconditions:
+>
+> - `stepExecution` — which lenses/phases/gates the agent actually ran on this finding (e.g. `Lens: A=✓ B=✓ C=✗(N/A) D=?`)
+> - `rulesApplied` — exercise log for six cross-cutting rules ported from PlamenTSV/plamen: **R8** (cached parameter / stored external state), **R10** (worst-state severity), **R11** (unsolicited token transfer), **R12** (exhaustive enabler enumeration), **R15** (flash-loan precondition manipulation), **R16** (oracle integrity)
+> - `depthEvidence` — concrete-value tags: `[BOUNDARY:X=val]`, `[VARIATION:A→B]`, `[TRACE:path→outcome]`
+> - `missingPrecondition` / `preconditionType` — names the blocker when an attack is currently stopped (STATE / ACCESS / TIMING / EXTERNAL / BALANCE)
+> - `postconditionsCreated` / `postconditionTypes` / `whoBenefits` — what conditions a successful exploit leaves behind that another finding could chain off
+>
+> All fields are optional and additive; pre-existing findings still validate. A three-contest pilot suggested a large recall gain, but n=3 with stale baselines is not a benchmark — the numbers and their caveats are quarantined under [Unvalidated since the v8 baseline](#-unvalidated-since-the-v8-baseline).
+
+> **v8 changes**: Integrated open-source detection knowledge from [pashov/skills](https://github.com/pashov/skills) (MIT), [PlamenTSV/plamen](https://github.com/PlamenTSV/plamen) (MIT), and [forefy/.context](https://github.com/forefy/.context) (MIT). Added 5 new detection modules (ERC-4626 vault, lending/liquidation, AMM/MEV, EIP-7702, ERC-4337), 58 extended heuristics, protocol-type statistical enrichment across all 7 primers, and Devil's Advocate verification methodology. Module trigger system now uses tier hierarchy (Tier 0 always-load, Tier 1 protocol-type, Tier 2 feature-detected). See [ATTRIBUTION.md](.claude/skills/krait/ATTRIBUTION.md) for full source details.
+
+---
+
+## Pipeline Overview
+
+```
+Phase 0: RECON           Phase 1: DETECTION           Phase 2: STATE           Phase 3: VERIFY
+───────────────          ─────────────────           ─────────────          ──────────────
+AST extraction           Pass 1: Tiered scan          Dependency map          8 kill gates
+Risk scoring             ├─ Feynman interrogation     Mutation matrix         Impact Premise
+File tiering             ├─ 101 heuristic triggers    Cross-check verify      10 FP patterns
+Attack surface           └─ Function-state matrix     Operation ordering      Deep code trace
+Primer selection                                      Parallel paths          PoC construction
+                         Pass 2: 4 parallel lenses    User journey sim        Severity assignment
+      │                  ├─ A: Access/State/Gov       Masking detection           │
+      │                  ├─ B: Value/Economic                                     │
+      │                  ├─ C: External/Cross-contract    ◄── cross-feed ──►      │
+      │                  └─ D: Edge/Math/Standards                                │
+      │                                                                           ▼
+      │                  Pass 3: Mechanical sweep                          Phase 4: REPORT
+      │                  26 targeted modules (A-X)                         ──────────────
+      │                  7 domain primers                                  Root-cause consolidation
+      │                        │                                           Trust downgrade
+      │                        ▼                                           Dedup + rank
+      │                  Phase 1b: RESCAN                                  JSON + Markdown
+      │                  broad 2nd pass, exclusion list                    .audit/krait-report.md
+      │                  (self-skips if pass 1 found
+      ▼                   nothing above Info)                                     ▲
+  .audit/recon.md               │                                                 │
+                                ▼                                          Phase 3b: REVIEW
+                          Phase 1c: PER-CONTRACT                           2nd opinion on kills
+                          1 agent per inheritance cluster                  (MECHANISM-ONLY first)
+                          max 8 clusters, ≤5 findings each
+                                │
+                                ▼
+                          .audit/findings/*.md
+```
+
+Phases 1b and 1c are **recall** stages: they add candidates, never bypass gates. Everything
+they surface goes through the same Phase 3 verification as a Phase 1 candidate.
+
+---
+
+## Phase 0: Recon — Deterministic Risk Scoring
+
+Every file gets a risk score. This determines analysis depth — not random, not LLM-decided.
+
+### Risk Score Formula
+
+```
+RISK_SCORE = (external_calls × 5)
+           + (state_writing_functions × 4)
+           + (payable_functions × 4)
+           + (assembly_blocks × 6)
+           + (unchecked_blocks × 3)
+           + (LOC × 0.05)
+           + (novel_code_bonus: +15)
+           + (value_handling_bonus: +10)
+           + (immaturity_bonus: +10)
+```
+
+### File Tiers
+
+| Tier | Files | Treatment |
+|------|-------|-----------|
+| TIER 1 (DEEP) | Top 5 by risk score | Full 3-pass analysis, all lenses, all modules |
+| TIER 2 (STANDARD) | Next 10 | Standard analysis, selected modules |
+| TIER 3 (SCAN) | Remainder | Quick scan, heuristic triggers only |
+
+### Recon Outputs
+
+- **AST Fact Extraction** — compiler-verified inheritance trees, function registry, call graphs, modifier usage, state variables (via `ast-extract.sh`, fallback to regex)
+- **Fund Flows** — where value enters, moves, and exits the protocol
+- **Trust Boundaries** — which contracts trust which, external protocol dependencies
+- **Contract Maturity** — fork detection, novel code identification
+- **Protocol Primer Selection** — automatically selects domain-specific detection primers (DEX, Lending, Staking, etc.)
+- **Optional Slither Pre-Scan** — supplementary signal, never auto-reported
+
+---
+
+## Phase 1: Detection — 16-Angle Analysis
+
+### Multi-Mindset × Multi-Lens (v7.0)
+
+Each function in Tier 1 files is examined from **16 angles**:
+
+**4 Independent Mindsets:**
+
+| Mindset | Core Question |
+|---------|--------------|
+| **Attacker** | "How would I exploit this to drain funds or escalate privilege?" |
+| **Accountant** | "Trace every wei — do the numbers add up across all paths?" |
+| **Spec Auditor** | "Does the code match what docs, comments, and EIPs say it should do?" |
+| **Edge Case Hunter** | "What breaks at zero, max, empty, self-referential, or reentrant?" |
+
+**4 Focused Lenses (Pass 2):**
+
+| Lens | Focus Area |
+|------|-----------|
+| **A** | Access control, state integrity, governance invariants |
+| **B** | Value flow, economic logic, fee consistency, rounding |
+| **C** | External interactions, cross-contract, reentrancy, CEI |
+| **D** | Edge cases, math safety, type casts, EIP/ERC compliance |
+
+Findings discovered by multiple mindsets or lenses get a **consensus boost**. Single-source findings get extra scrutiny in verification.
+
+### Pass 1: Feynman Interrogation
+
+Every function is questioned through 7 categories (28+ questions):
+
+1. **PURPOSE** — What invariant does this function protect? What breaks if it's removed?
+2. **ORDERING** — Can I reorder operations to create an inconsistent state?
+3. **CONSISTENCY** — Why does function A have this guard but function B doesn't?
+4. **ASSUMPTIONS** — What's implicitly trusted? What if that trust is violated?
+5. **BOUNDARIES** — First call, last call, double-call, empty state, max values?
+6. **RETURN VALUES** — What persists on revert? Can a failed call leave dirty state?
+7. **EXTERNAL CALLS** — What can happen between the call and the next line? Cross-tx windows?
+
+### Pass 1: 101 Heuristic Triggers (43 original + 58 extended)
+
+Each heuristic was extracted from a real missed finding in shadow audits, or integrated from open-source community sources (see [ATTRIBUTION.md](.claude/skills/krait/ATTRIBUTION.md)):
+
+**Business Logic**: flash loan interactions, first-depositor inflation, round-trip exploits, fee-free arbitrage, circular collateral, liquidation profitability edge
+
+**Reentrancy & State**: CEI violations, cross-function reentrancy, read-only reentrancy, state update ordering, storage collision
+
+**Access Control**: missing modifiers on state writers, privilege escalation, proxy admin confusion, initializer re-call, ownership transfer gaps
+
+**Value Handling**: unchecked transfer returns, ETH stuck in contract, fee-on-transfer tokens, rebasing tokens, ERC-777 hooks, approval race conditions
+
+**Math & Precision**: unsafe type casts (uint256→uint128 silent truncation), rounding direction errors, accumulator overflow, division before multiplication, decimal mismatch
+
+**External Integration**: oracle staleness, Chainlink sequencer downtime, Uniswap V3 tick math, Curve pool read-only reentrancy, Aave/Compound deprecated functions
+
+**Governance & Time**: flash-loan voting, snapshot manipulation, timelock bypass, emergency pause incomplete, proposal front-running
+
+**Cross-Chain**: bridge message replay, relayer trust, finality assumptions, chain-specific block.timestamp behavior
+
+### Pass 3: Mechanical "What's Missing" Sweep
+
+7 systematic checks run after the creative analysis:
+
+1. **Missing inverse operations** — set without unset, lock without unlock, pause without unpause
+2. **Missing access control** — state-writing functions without modifiers
+3. **Missing reward checkpoint** — reward state not updated before balance change
+4. **Missing restriction coverage** — some paths restricted, parallel paths unrestricted
+5. **Missing paired operation validation** — deposit validates but withdraw doesn't
+6. **Parameter transition safety** — retroactive impact on existing positions
+7. **DoS on core functions** — unbounded loops, external call reverts, dust griefing
+
+### 26 Targeted Analysis Modules (A-X)
+
+Protocol-specific deep dives, triggered by recon findings:
+
+Each high-impact module has a dedicated skill file in [`detector/modules/`](.claude/skills/krait/detector/modules/) with structured tables, step-by-step methodology, and trigger patterns. The detector reads the relevant module files based on what recon identifies.
+
+| Module | Focus |
+|--------|-------|
+| A | Untrusted recipient analysis |
+| B | Type cast safety (uint256→uint128, int256→uint256) |
+| C | Transfer order / implicit flash loans |
+| D | Fee consistency cross-check (deposit vs withdraw vs liquidate) |
+| E | EIP/Standard compliance (ERC-712 typehash char-by-char!) |
+| F | Token compatibility (fee-on-transfer, rebasing, ERC-777) |
+| G | Factory/deployment patterns |
+| H | Ownership/permission persistence across upgrades |
+| I | Weight/proportionality calculations |
+| J | External protocol integration (Convex, Aave, Uniswap — permissionless function check, shutdown/deprecation, silent failure) |
+| K | Multi-transaction attack sequences |
+| L | Derived class / override completeness |
+| M | State variable lifecycle tracing |
+| N | DoS-to-exploit escalation paths |
+| O | Payment/distribution flow tracing |
+| P | Cross-chain bridge security |
+| Q | NFT attribute & randomness integrity |
+| R | Governance voting integrity |
+| S | Cross-contract state on transfer |
+| T | Cross-interaction batch analysis |
+| U | DeFi integration library (Curve, UniV3, Chainlink, Aave/Compound, Lido/stETH) |
+| V | Economic design reasoning (circular collateral, liquidation profitability, first/last mover) |
+| W | Missing functionality detection |
+| X | Version & standard compliance audit (EIP-712, Safe version, OZ version, Solidity version) |
+
+### 7 Domain-Specific Primers
+
+Automatically selected based on recon:
+
+| Primer | Checks |
+|--------|--------|
+| DEX/AMM | 20 checks — first depositor, round-trip exploit, flash loan price manipulation, LP pricing, factory rug |
+| Lending | 22 checks — oracle manipulation, liquidation profitability, interest precision, health factor staleness |
+| Staking/Governance | Reward timing, snapshot manipulation, delegation attacks, vote weight flash loans |
+| Proxy/Upgrades | Storage collision, initializer safety, implementation selfdestruct, transparent vs UUPS |
+| GameFi/NFT | Randomness manipulation, attribute collision, mint griefing, royalty bypass |
+| Bridge/Cross-chain | Message replay, relayer trust, finality assumptions, token mapping |
+| Wallet/Safe/AA | Signature validation, nonce management, module injection, guard bypass |
+
+---
+
+## Phase 2: State Analysis — Coupled State Inconsistency
+
+This phase catches bugs that per-function analysis misses — where the vulnerability is in the **relationship** between state variables across different functions.
+
+### 8-Step Methodology
+
+1. **Dependency Mapping** — Every state variable paired with its coupled dependencies (totalSupply ↔ sum of balances, rewardDebt ↔ stakedAmount)
+2. **Mutation Matrix** — For each state variable, list EVERY function that modifies it
+3. **Cross-Check Verification** — When StateA updates, does ALL dependent StateB update in the same tx?
+4. **Operation Ordering** — Trace sequential order of state changes within each function
+5. **Parallel Path Comparison** — Compare similar operations (deposit vs mint, withdraw vs liquidate, normal vs emergency)
+6. **User Journey Simulation** — Test realistic sequences (deposit → claim → withdraw → re-deposit)
+7. **Masking Code Detection** — Flag defensive patterns (ternary clamps, try/catch, min/max caps) that HIDE broken invariants instead of fixing them
+8. **Cross-Feed from Detector** — Consume detector candidates, trace structural issues deeper
+
+### Why This Matters
+
+28% of missed findings in shadow audits v1-v4 were state coupling bugs that per-function analysis couldn't see. Adding this phase improved recall by 15% in v5+.
+
+---
+
+## Phase 3: Verification — 8 Kill Gates
+
+Every candidate finding must survive **all 8 gates** before reaching the report. These gates have eliminated 95% of false positives across 50 blind shadow audits — 0.0 FPs/contest in v7 and v8.
+
+### Automatic Kill Gates
+
+| Gate | Kills | Example |
+|------|-------|---------|
+| **A** | Generic best practice | "Use SafeERC20", "Add events", "Use two-step ownership" |
+| **B** | Theoretical / not exploitable | Exotic token behavior not in actual token list |
+| **C** | Intentional design | Matches documentation, reference implementation, or fork origin |
+| **D** | Speculative | "Could be an issue if..." — no concrete WHO/WHAT/HOW MUCH |
+| **E** | Admin trust | Requires trusted admin action (exception: missing timelock on irreversible destructive ops) |
+| **F** | Dust | Rounding loss < $1/tx, bounded truncation, precision loss < gas cost |
+| **G** | Out of context | Token behaviors for unlisted tokens, chain issues on unsupported chains |
+| **H** | Publicly known | Already in README "Known Issues" or previous audits |
+
+**DoS Exception**: DoS that bricks a core lifecycle function + low cost to trigger + persistent = Medium minimum, survives gates A/B/D/F.
+
+**Both surfaces run these gates.** The skill encodes them in `critic/instructions.md`; the
+CLI encodes them in `src/agents/critic.ts` (`KILL_GATES`). Attribution is enforced
+mechanically — a verdict carrying a gate letter is forced to `invalid` regardless of what
+the model returned — and `src/agents/__tests__/parity.test.ts` fails the build if a gate,
+the DoS carve-out, or an FP pattern exists on one surface but not the other.
+
+### Impact Premise — harm, not mechanism (v8.2)
+
+Gate D kills "speculative" findings, but speculative is a judgement call. The Impact
+Premise makes it mechanical: before any trace, the candidate must carry a one-sentence
+harm statement naming **WHO loses WHAT**.
+
+| Statement | Verdict |
+|---|---|
+| "`startLiquidation` succeeds while the market is active" | Mechanism → killed as `MECHANISM-ONLY` |
+| "the parameter can be set to zero" | Mechanism → killed |
+| "state is corrupted" / "a guard is missing" | Mechanism → killed |
+| "claimants receive 15% less than their pro-rata share" | Harm → proceeds |
+| "withdrawals revert permanently once the parameter is zero" | Harm → proceeds |
+
+This gate tests whether a consequence was *stated*, not whether it was *proven* — proving
+it is the verification step's job. `MECHANISM-ONLY` kills are the reviewer's highest-priority
+revival class, because a missing description is cheap to fix and does not mean the mechanism
+was disproven.
+
+### 10 False Positive Patterns
+
+After kill gates, remaining candidates are checked against 10 empirically-derived FP patterns:
+
+1. **Authorization handled elsewhere** — auth in calling function, modifier, router, factory
+2. **Validation in called functions** — guard in internal/external callee, library protection
+3. **OpenZeppelin/Solmate standard protection** — battle-tested library provides the guard
+4. **Rounding drift cleaned downstream** — dust threshold, reconciliation, safe rounding direction
+5. **Bounded loops / economic constraints** — max iterations bounded, griefing too expensive
+6. **Severity inflation** — real issue but actual impact lower than claimed
+7. **Solidity 0.8+ arithmetic safety** — checked math built in (exception: explicit casts truncate silently)
+8. **Read-only / view function confusion** — view functions can't modify state
+9. **Test/script/interface-only** — not production code
+10. **Documented design decision** — intentional trade-off acknowledged in code
+
+### Verification Methods
+
+| Method | When Used |
+|--------|-----------|
+| **Deep Code Trace** | Read cited code, trace full call chain, check for mitigating code in parent contracts, modifiers, guards |
+| **PoC Trace** | Construct concrete attack: initial state → function calls → state changes → stolen amount |
+| **Hybrid** | Code trace + PoC with actual values |
+
+### Verdict Assignment
+
+- **TRUE POSITIVE (TP)** — Verified exploitable, include proof trace
+- **LIKELY TRUE (LT)** — Mechanism confirmed, edge-case dependent
+- **DOWNGRADE** — Real issue, wrong severity
+- **FALSE POSITIVE (FP)** — Disproven with evidence
+- **INSUFFICIENT EVIDENCE (IE)** — Can't prove or disprove
+
+---
+
+## Phase 4: Report
+
+1. Load only **VERIFIED + LIKELY TRUE** findings
+2. **Deduplicate** — same file + lines + root cause → merge
+3. **Rank** — CRITICAL > HIGH > MEDIUM
+4. Generate `.audit/krait-report.md` (markdown) + `.audit/krait-findings.json` (JSON)
+
+### Severity Rubric
+
+| Severity | Criteria |
+|----------|----------|
+| **CRITICAL** | Direct, unconditional fund loss or permanent DoS. Any user can trigger. |
+| **HIGH** | Conditional fund loss, privilege escalation, broken core invariant. Attacker can create conditions. |
+| **MEDIUM** | Value leakage, griefing with cost, degraded functionality. Limited impact or unlikely conditions. |
+| **LOW** | Informational, gas optimization, cosmetic. |
+
+Every H/M finding includes: file:line location, description, impact assessment, concrete exploit trace (WHO does WHAT to steal HOW MUCH), root cause, recommendation with code before/after.
+
+---
+
+## Second Opinion: `/krait-review`
+
+The kill gates are aggressive by design — zero false positives is the #1 priority. But aggressive gates can over-kill legitimate findings. `/krait-review` re-examines killed findings:
+
+| Gate | Re-examination |
+|------|---------------|
+| **C** (intentional design) | Does the "intentional" design CREATE an exploitable condition? |
+| **E** (admin trust) | Missing timelock on irreversible destructive action? Rug vector? |
+| **B** (theoretical) | Can a multi-step exploit be constructed with flash loans or MEV? |
+| **F** (dust) | Can dust accumulate over many transactions? Protocol-TVL context? |
+| **D** (speculative) | Can a concrete trace be constructed now with more context? |
+
+Revived findings are surfaced as **"Worth Manual Review"** — flags for the auditor, not verified TPs. The main report's zero-FP standard is preserved.
+
+---
+
+## Cross-Feed Iteration Loop
+
+After Detection and State Analysis complete their first pass, findings cross-feed:
+
+```
+Detector candidates ──► State Auditor: "Does this happen during state inconsistency?"
+State gaps           ──► Detector: "Why doesn't function X update coupled state Y?"
+Masking code         ──► Both: "What invariant is broken underneath?"
+```
+
+If new findings emerge, the loop runs max 2 additional cycles. This catches bugs that neither phase would find alone.
+
+---
+
+## Shadow Audit Results
+
+Tested blind against 50 Code4rena contests. The full results are in [`shadow-audits/`](shadow-audits/).
+
+### Progression
+
+| Version | Contests | Avg Precision | Avg Recall | FPs/Contest | Key Change |
+|---------|----------|--------------|------------|-------------|------------|
+| v1 | 1-3 | 12% | 5.8% | 1.3 | Baseline |
+| v2 | 5-10 | 66% | 30.2% | 2.3 | Multi-pass + lenses |
+| v3 | 11-20 | 34% | 14.1% | 3.3 | Over-engineered, regression |
+| v4 | 21-30 | 37% | 14.0% | 4.2 | Module expansion |
+| v5 | 31-35 | 70% | 9.5% | 0.6 | Kill gates introduced |
+| v6.4 | 36-40 | 90% | 11.8% | 0.2 | Primers + architecture cleanup |
+| v7 | 41-45 | **100%** | 11.0% | **0.0** | Module system + recon flags + new heuristics |
+| **v8** | **46-50** | **100%** | **15.2%** | **0.0** | Open-source integration (pashov/plamen/forefy) + 5 new modules |
+
+**v8 is the canonical baseline.** v8.1 and v8.2 changed methodology but have not yet been
+measured over the full 50-contest registry — see "Unvalidated since the v8 baseline" below.
+No headline number moves until that regression runs.
+
+### Latest 5 Contests (v8)
+
+| Contest | Type | Official H+M | TPs | FPs | Precision | Recall | Key Module |
+|---------|------|--------------|-----|-----|-----------|--------|------------|
+| PoolTogether | ERC-4626 Prize Vault | 9 | 1 | 0 | **100%** | 11.1% | erc4626-vault-deep |
+| InitCapital | Lending/Hooks | 15 | 0 | 0 | N/A | 0% | lending-liquidation-deep |
+| GoodEntry | UniV3/AMM | 14 | 5 | 0 | **100%** | **35.7%** | amm-mev-deep |
+| Arcade | Governance | 8 | 2 | 0 | **100%** | **25.0%** | governance-voting |
+| Frankencoin | Mixed CDP | 20 | 2 | 0 | **100%** | 10.0% | lending-liq + economic |
+
+10 TPs, 0 FPs across the v8 batch. 4/5 contests at 100% precision (InitCapital found no TPs but also no FPs — clean sheet). No other AI audit tool publishes precision/recall against real competitions.
+
+---
+
+## ⚠ Unvalidated since the v8 baseline
+
+Everything in this section changed the methodology **after** the 50-contest measurement.
+None of it has been re-measured over the full registry. **Do not quote these numbers as
+Krait's performance.** They are recorded here so the eventual regression has something to
+compare against.
+
+### v8.1 pilot — Tier A audit trail (n=3, NOT a benchmark)
+
+| Contest | v8 P / R / FP | v8.1 P / R / FP | Δ Recall |
+|---------|---|---|---|
+| PoolTogether | 100% / 11.1% / 0 | 100% / 44.4% (4/9) / 0 | +33.3 pp |
+| Arcade | 100% / 25.0% / 0 | 100% / 75.0% (6/8) / 0 | +50.0 pp |
+| Frankencoin | 100% / 10.0% / 0 | 100% / 42.9% (9/21) / 0 | +32.9 pp |
+| Average | 100% / 15.4% / 0 | 100% / 54.1% / 0 | +38.7 pp |
+
+Why this is signal and not proof:
+
+1. The v8 baselines were ~2 months old, so part of the delta is "today's run vs an old run", not the schema change.
+2. n=3. On an 8-finding contest like Arcade, a single extra finding is ±12.5 pp — the observed +50 pp is four findings.
+3. The audit agents knew this was a Tier A pilot, which likely biased adoption of the new fields upward relative to a stock `/krait` invocation.
+
+### v8.2 — unmeasured entirely
+
+| Change | Surface | Expected direction |
+|---|---|---|
+| Kill gates A–H + 10 FP patterns ported into the CLI critic | CLI only | Precision ↑ on the CLI (it previously had neither); no change to the skill |
+| Impact Premise gate (A3) | both | Precision ↑, recall ↓ slightly — it is a stricter Gate D |
+| Rescan pass (B4) | both | Recall ↑, cost ↑ ~2 agents |
+| Per-contract pass (B3) | both | Recall ↑, cost ↑ up to 8 agents |
+| Trust downgrade (A5) | both | Finding count ↑ (previously killed by gate E), severity distribution shifts down |
+| Root-cause consolidation (A7) | both | Finding count ↓ without losing locations |
+| Detector prompt 767 → 613 lines | skill | Instruction adherence ↑ (v7 measured this effect once already) |
+
+To validate:
+
+```bash
+npm run shadow:regress -- --contests <ids> --update   # record the current baseline
+npm run shadow:regress -- --contests <ids>            # gate a change against it
+```
+
+The gate blocks on any new false positive and on a recall drop worse than 2 pp.
+
+### Self-Improving Loop
+
+After each blind test: score → root-cause every miss → update methodology → re-test. This loop produced 43 original heuristics + 58 extended heuristics, 15 deep-dive module files + 26 inline modules, 7 primers, and 10 FP patterns from real missed findings — not from theory.
+
+---
+
+## By the Numbers
+
+| Metric | Count |
+|--------|-------|
+| Detection heuristics | 101 (43 original + 58 extended) |
+| Deep-dive module files | 15 |
+| Inline analysis modules | 26 (A-X) |
+| Analysis angles per function | 16 (4 lenses × 4 mindsets) |
+| Domain-specific primers | 7 |
+| Kill gates | 8 (+ Impact Premise) |
+| False positive patterns | 10 |
+| Feynman question categories | 7 (28+ questions) |
+| Mechanical sweep checks | 7 |
+| Recall phases (v8.2) | 2 (rescan, per-contract) |
+| Shadow audits completed | 50 |
+| Precision (v7 + v8, last 10 contests) | 100% |
+| FPs per contest (v7 + v8) | 0.0 |
+| Recall (v8) | 15.2% |
+
+The last three rows are the **v8** measurement. v8.1 and v8.2 have not been re-measured
+over the registry — see [Unvalidated since the v8 baseline](#-unvalidated-since-the-v8-baseline).

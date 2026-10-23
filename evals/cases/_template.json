@@ -1,0 +1,25 @@
+{
+  "id": "<short-id>",
+  "skill": "security-auditor",
+  "domain": "<evm|zk-circom|web|native|...>",
+  "source": {
+    "repo_url": "<public repo of the audited code>",
+    "ref": "<commit BEFORE the fixes>",
+    "path": "<subdir in scope, or .>",
+    "report_url": "<public final audit/contest report used as ground truth>"
+  },
+  "sanitize": [
+    "<files that reveal answers: audit reports, known-issues lists, fix commits, test names that name the bug>"
+  ],
+  "ground_truth": [
+    {
+      "id": "H-01",
+      "severity": "high",
+      "scope": "<function, template, route or contract name>",
+      "keywords": [
+        "<root-cause words a correct finding would use>"
+      ],
+      "summary": "<one sentence from the public report>"
+    }
+  ]
+}

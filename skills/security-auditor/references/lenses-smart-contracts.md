@@ -95,6 +95,17 @@ Apply a fixed set of corner-case questions to every boundary until none is unexa
 - Each `bytes`/`abi.decode` input: empty input, attacker-supplied length prefixes, `bytes20(longer)` truncation, packed-encoding ambiguity, field-order mismatches across files.
 Candidate evidence: the boundary exercised, the assumption the caller makes, and the actual behavior under the corner-case input with its state delta.
 
+**State coupling**
+The bug lives in the relationship between state variables across functions, which per-function review misses.
+1. **Dependency map**: pair every state variable with the variables that must move with it (`totalSupply` ↔ Σ`balances`, `rewardDebt` ↔ `staked`, `lastUpdate` ↔ accumulator, mirrored balances across contracts).
+2. **Mutation matrix**: for each variable, list every function that writes it.
+3. **Cross-check**: when A changes, does every coupled B change in the same transaction, on every path, including early returns and skipped branches?
+4. **Ordering**: within each function, is the coupled state read before or after it is updated (accrue → change → checkpoint)?
+5. **Parallel paths**: compare deposit vs mint, withdraw vs liquidate, normal vs emergency, single vs batch for the same coupled writes.
+6. **Journeys**: walk realistic sequences (deposit → claim → partial withdraw → re-deposit → transfer) and track every coupled pair.
+7. **Masking code**: flag defensive code that *hides* a broken invariant instead of preventing it: ternary clamps (`x > y ? x - y : 0`), `try/catch` swallowing a revert that "should never happen", early `return` on zero, `min(calculated, available)` caps, checked math hiding why values diverged. For each, name the invariant underneath and whether the masked condition can be driven into value loss.
+Candidate evidence: the coupled pair, the writer that desynchronizes it, the masking code (if any), and the value delta that results.
+
 **Token integration**
 Assume every token the protocol accepts can be weird, unless the code allowlists specific tokens. For each token-touching path, check behavior under: reentrant transfer hooks (ERC777, ERC1363, ERC721/1155 receivers); missing or `false` return values; fee on transfer and transfer of less than the amount; balance changes outside transfers (rebasing, airdrops, interest); upgradeable tokens; flash-mintable supply; blocklists and pausing; approval race protections, and reverts on zero-value approval, on approval to the zero address, or on large approvals; reverts on zero-value transfers or transfers to the zero address; several addresses for one token; low (<6) or high (>18) decimals; `transferFrom` with `src == msg.sender` treated specially; non-string metadata and injection through the token name; no-op or non-standard `permit` (DAI, WETH fallback); native-currency representations (`0xEeee…`, `address(0)`, WETH). For tokens the protocol issues, check ERC20/721 conformity (return values, events, `decimals`, allowance semantics, `safeTransferFrom` receiver checks) and owner powers (mint, pause, blocklist, upgrade).
 Candidate evidence: the token behavior, the code path that assumes standard behavior, and the state or balance delta it causes.
@@ -155,7 +166,7 @@ Every candidate passes four sequential gates. A failed gate settles the verdict;
 
 Then apply the evidence bar:
 
-5. `confirmed` requires all four gates plus a bounded local observed result: a sandboxed test in a scratch copy, run with only locally present dependencies, whose output shows the balance, share, state, or revert effect. If the sandbox cannot be enforced, the toolchain is absent, or dependencies are missing, keep the source trace and record `needs_validation` with that exact blocker and the test you would run. `proof.md` § Stateful fuzzing adds a bounded invariant campaign as an alternative local observation for conservation and invariant candidates.
+5. `confirmed` requires all four gates plus a bounded local observed result: a sandboxed test in a scratch copy, run with only locally present dependencies, whose output shows the balance, share, state, or revert effect. If the sandbox cannot be enforced, the toolchain is absent, or dependencies are missing, keep the source trace and record `needs_validation` with that exact blocker and the test you would run. `proof.md` § Choosing the proof (stateful fuzzing) adds a bounded invariant campaign as an alternative local observation for conservation and invariant candidates.
 6. Cross-contract echo: when the same root cause is confirmed in one contract, each identical instance in another contract is validated on its own trace and receives its own fingerprint only when its fix differs.
 7. Confidence: start at high. Lower to medium for each of: a specific but achievable required state, bounded non-compounding impact, or a trace that needed a mock for external behavior. Lower to low when two apply. A partial attack path is not confidence-reduced — it is not confirmed.
 8. Severity calibration for this domain, never exceeding the demonstrated effect:

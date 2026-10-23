@@ -4,9 +4,17 @@ Security-audit skills for coding agents (Claude Code, Codex and similar), coveri
 
 | Skill | What it does |
 |---|---|
-| [`security-auditor`](skills/security-auditor/) | **Recommended.** One skill that takes the best of all three sources. Cloudflare provides the workflow (coverage plan, critic waves, three verdicts, validated `findings.json`). Pashov provides the attacker mindset, the 12 smart-contract lenses, the judging gates and invariant mapping. Trail of Bits provides function-level context, the false-positive procedure and triage brocards, variant hunting, diff review, weird tokens, unit-mismatch checks, non-EVM chains, and C/Rust/crypto checks. Modes: full audit, PR/diff review, verify a finding, find variants, pre-audit map. CC BY-SA 4.0. |
+| [`security-auditor`](skills/security-auditor/) | **Recommended.** One skill that takes the best of all three sources. Cloudflare provides the workflow (coverage plan, critic waves, three verdicts, validated `findings.json`). Pashov provides the attacker mindset, the 12 smart-contract lenses, the judging gates and invariant mapping. Trail of Bits provides function-level context, the false-positive procedure and triage brocards, variant hunting, diff review, weird tokens, unit-mismatch checks, non-EVM chains, and C/Rust/crypto checks. Krait adds the impact premise, defect-mutation proof check, revival review, state-coupling and masking-code analysis, the per-component pass, risk scoring, and EVM heuristics and protocol primers. Modes: full audit, PR/diff review, verify a finding, find variants, pre-audit map. CC BY-SA 4.0. |
 | [`unified-security-audit`](skills/unified-security-audit/) | Cloudflare's six-phase audit workflow (recon, coverage-ledger hunting, independent validation, schema-checked `findings.json`, verification, reports) plus Pashov Audit Group's Solidity expertise: 12 hacking-agent attack classes and judging gates, `x-ray` pre-audit recon, and `fizz` Echidna/Medusa fuzzing. |
-| [`circom-auditor`](skills/circom-auditor/) | Circom circuit review for soundness, completeness, privacy and constraint bugs, using a 17-agent parallel workflow or a local single-agent pass. |
+| [`circom-auditor`](skills/circom-auditor/) | Circom circuit review for soundness, completeness, privacy and constraint bugs, using a 17-agent parallel workflow or a local single-agent pass. By [zkSecurity](https://github.com/zksecurity/zk-skills) (MIT), included unmodified. |
+
+### Krait checklist
+
+[`third_party/krait/`](third_party/krait/) holds a copy of Zealynx Security's [Krait](https://github.com/ZealynxSecurity/krait) (MIT), unmodified except for two example keys redacted (see `THIRD_PARTY_NOTICES.md`). Its checklist plugin is in this marketplace: 845 checks across 39 DeFi verticals, for audit-readiness scans (`/krait:scan`, `/krait:assess`, `/krait:check`). Krait's full `/krait` audit pipeline and MCP servers are not marketplace plugins; install them with its own `scripts/install.sh` if you want them. Its methodology is also built into `security-auditor`.
+
+```
+/plugin install krait --marketplace stephenyang21/auditor-zk-skills
+```
 
 ### Trail of Bits plugins
 
@@ -162,18 +170,21 @@ generate a fuzz suite for this repo
 audit the Circom circuits in this repo
 ```
 
-## Tests
+## Tests and evals
 
 ```bash
-cd skills/unified-security-audit
-node validate-findings.test.cjs && node validate-coverage-ledger.test.cjs
+cd skills/unified-security-audit && node validate-findings.test.cjs && node validate-coverage-ledger.test.cjs
 ```
+
+[`evals/`](evals/) holds a shadow-audit benchmark: blind runs on code with publicly known bugs, scored for recall and precision with `evals/score.py`. It starts with three Circom cases from zkbugs. No results are recorded yet, so the repo makes no accuracy claims.
 
 ## License and attribution
 
 This repository has two licences:
 
 - `skills/security-auditor/` is **CC BY-SA 4.0**, because it adapts Trail of Bits material. See its [`NOTICE.md`](skills/security-auditor/NOTICE.md) for sources.
+- `skills/circom-auditor/` is **MIT, © 2026 zkSecurity** (see [its `LICENSE`](skills/circom-auditor/LICENSE)), from [zksecurity/zk-skills](https://github.com/zksecurity/zk-skills).
+- `third_party/krait/` is **MIT, © 2025-2026 Zealynx Security** (see [`third_party/krait/LICENSE`](third_party/krait/LICENSE)).
 - The other skills under `skills/` and the repository's own files are **MIT** (see [`LICENSE`](LICENSE)). `unified-security-audit` builds on [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) and [pashov/skills](https://github.com/pashov/skills), both MIT. Credits and changes are in [`skills/unified-security-audit/NOTICE.md`](skills/unified-security-audit/NOTICE.md).
 - `third_party/trailofbits/` is © Trail of Bits, **CC BY-SA 4.0** (see [`third_party/trailofbits/LICENSE`](third_party/trailofbits/LICENSE)). It is copied unmodified. If you change and share these files, the changes must also be CC BY-SA 4.0.
 

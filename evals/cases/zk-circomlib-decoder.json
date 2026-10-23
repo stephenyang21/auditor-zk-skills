@@ -1,0 +1,31 @@
+{
+  "id": "zk-circomlib-decoder",
+  "skill": "security-auditor",
+  "domain": "zk-circom",
+  "source": {
+    "repo_url": "https://github.com/zksecurity/zkbugs",
+    "ref": "main",
+    "path": "dataset/circom/iden3/circomlib/veridise_decoder_accepting_bogus_output_signal",
+    "license_note": "zkbugs dataset; ground truth adapted from zkSecurity circom-auditor benchmarks (MIT)"
+  },
+  "sanitize": [
+    "README.md",
+    "zkbugs_config.json",
+    "zkbugs_*.sh"
+  ],
+  "ground_truth": [
+    {
+      "id": "H-1",
+      "severity": "high",
+      "scope": "Decoder",
+      "keywords": [
+        "one-hot",
+        "one hot",
+        "boolean",
+        "sum",
+        "decoder"
+      ],
+      "summary": "Decoder enforces only out[i]*(inp-i)===0, with no booleanity and no sum-to-one constraint, so the prover can output all zeros and an arbitrary success flag."
+    }
+  ]
+}

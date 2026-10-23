@@ -20,6 +20,8 @@ Before any analysis, write in your own words:
 
 If the claim cannot be restated coherently, it collapses here. About half of false positives do.
 
+**Impact premise.** Then write one sentence naming **who loses what**: "depositors receive 15% less than their pro-rata share", "withdrawals revert permanently once `rate` is zero", "tenant B reads tenant A's invoices". A sentence that describes only a mechanism ("the function succeeds while the market is active", "the parameter can be zero", "state is corrupted", "a guard is missing") fails the premise. Reject the candidate with reason `MECHANISM-ONLY`. This tests whether a consequence was *stated*, not whether it was *proven*; proving it is the gates' job. Mechanism-only rejections get priority in the revival review (§ Revival), because a missing harm statement is cheap to supply.
+
 ### 2. Triage brocards (cheap dismissals first)
 
 Stop at the first failure and record its number.
@@ -31,6 +33,8 @@ Stop at the first failure and record its number.
 5. **No vulnerability from documented behavior.** Documented, warned-about behavior used as documented counts against the downstream misuser, not this code.
 6. **No cure worse than the disease.** Note it when the only fix would cost more than the risk; this lowers priority and does not by itself reject.
 7. **The report is neither necessary nor sufficient.** A CVE, scanner rule ID, or CVSS score proves nothing either way; judge only the technical merit.
+8. **Already known.** The issue is listed in the project's README "known issues", a prior audit report, or an acknowledged design note in the repository. Record it as known, not as a new finding, unless the code has changed so the known issue is now worse or reachable in a new way.
+9. **Out of context.** It depends on a token, chain, compiler, runtime, or deployment mode the project explicitly does not support (for example a fee-on-transfer token when only allowlisted standard tokens are accepted, or an L2 quirk on a chain the project never deploys to). Check the allowlist, the configuration, and the documentation first. An arbitrary-token or arbitrary-chain path is in context.
 
 ### 3. Gates (sequential; a failed gate settles the verdict)
 
@@ -53,8 +57,10 @@ Stop at the first failure and record its number.
 - Same-principal or self-harm effects are not boundary crossings → `rejected`.
 
 **Gate D — Real impact.** Name the identifiable victim and the material harm: code execution, privilege gain, cross-principal data read or write, auth bypass, theft or freezing of funds, insolvency, a soundness break, or a shared-availability loss an unprivileged actor triggers.
-- Operational robustness, self-impact, or dust with no compounding → `rejected` (record it as hardening if useful).
+- Operational robustness, self-impact, or dust with no compounding → `rejected` (record it as hardening if useful). Dust means a loss below the gas or transaction cost of causing it, or bounded truncation that cannot accumulate. Check accumulation over many transactions and at the protocol's realistic TVL before calling it dust.
 - Defense in depth failing while the primary control holds → `rejected`.
+- **DoS carve-out.** A denial of service that bricks a core lifecycle function (withdraw, redeem, liquidate, claim, upgrade, block production, login), is cheap for an unprivileged actor to trigger, and persists without privileged intervention is at least **medium**. It is not dust, not theoretical, and not speculative, even with no direct theft.
+- **Worst realistic state.** Assess impact at the worst state the system can realistically reach (full utilization, maximum TVL, a fully unbonded position, the last withdrawer), not at the current snapshot or the friendliest test fixture.
 
 **Gate E — Environment.** Check protections outside the immediate code: sandboxing, allocator hardening, framework auto-escaping, parameterized queries, CSP, OS permissions, the language's memory safety.
 - One that fully prevents exploitation → `rejected`.
@@ -62,7 +68,7 @@ Stop at the first failure and record its number.
 - Mitigations that only raise cost → lower likelihood; do not reject.
 
 **Gate F — Proof.** Follow `proof.md`. Reproduce the minimum observed result in the sandbox: a test assertion, sanitizer report, state delta, bad witness, or rendered policy.
-- Reproduced → eligible for `confirmed`.
+- Reproduced, asserting the harm, and pinned by the defect-mutation check → eligible for `confirmed`.
 - Sandbox, toolchain, or dependency unavailable → `needs_validation`, naming that blocker and the exact test you would run.
 - Attempted and the effect did not occur → re-check Gates A and B. Reject if the source explains why; otherwise `needs_validation`, with the discrepancy.
 
@@ -94,7 +100,13 @@ Apply every item to every candidate:
 10. **Real vs theoretical impact.** Would it actually lead to execution, privilege, disclosure, or loss of value?
 11. **Primary vs defense-in-depth.** Is the failing control the one that matters?
 12. **Production path.** Test-only, debug-only, setup-only, and dead code are not production vulnerabilities, unless they ship and are reachable.
-13. **Language and framework guarantees.** Memory corruption in safe Rust, Go without `unsafe`/cgo, or managed runtimes is almost always false. ORM parameterization and template auto-escaping hold unless explicitly bypassed.
+13. **Language and framework guarantees.** Memory corruption in safe Rust, Go without `unsafe`/cgo, or managed runtimes is almost always false. ORM parameterization and template auto-escaping hold unless explicitly bypassed. Solidity ≥0.8 checks arithmetic (explicit casts still truncate silently; `unchecked` blocks do not check).
+14. **Protection handled elsewhere.** Authorization in the calling function, a modifier, a router, a factory, or a parent contract; validation in a callee or library; a battle-tested library (OpenZeppelin, Solmate) that already provides the guard.
+15. **Downstream cleanup.** Rounding drift removed by a later reconciliation, dust threshold, or safe-direction rounding; loops bounded by a real maximum, or griefing that costs more than it hurts.
+16. **View vs state.** A "write" claimed through a `view`/`pure` function, or a read-only path mistaken for a mutation.
+17. **Severity inflation.** The issue is real, but its demonstrated impact is lower than claimed. Correct the severity; don't reject.
+
+For any finding that rests on a dangerous precondition state, **enumerate every enabler**: list every path that can reach that state (including flash-loan-accessible balances, thresholds, and oracle values) rather than stopping at the first. For oracle-dependent findings, check the oracle's staleness, bounds, manipulability within one block, and failure behavior.
 
 Rationalizations to reject in yourself: "it looks dangerous, so it is", "skipping the full trace for efficiency", "this is clearly critical", "similar code was vulnerable elsewhere", "we can't prove it's *not* exploitable" (the claim carries the burden).
 
@@ -133,6 +145,19 @@ Start at **high**. Drop to **medium** for each of: a specific but achievable req
 ## Chains
 
 After every candidate has a verdict, review the `rejected` and `needs_validation` records together. Two weak records combine when one record's output satisfies the other's missing precondition: an info leak supplying a token, a low-privilege write reaching a privileged reader, or a DoS forcing a fallback path. Give each plausible chain its own fingerprint (`chain:<fp-a>+<fp-b>`) and send it through this procedure with a fresh skeptic.
+
+## Revival
+
+Aggressive gates over-reject. After chains, launch one fresh agent over the rejected records whose reason is `MECHANISM-ONLY`, intentional design, trusted role (Gate C), theoretical or reachability (Gate B), dust (Gate D), or speculative. Its questions:
+
+- **Mechanism-only**: can a concrete *who loses what* be stated now, with the context gathered since?
+- **Intentional design**: does the intended design itself create an exploitable condition for someone other than its designer?
+- **Trusted role**: is it an irreversible, destructive action with no timelock or delay, or does a named unprivileged amplifier exist?
+- **Theoretical**: can flash loans, MEV ordering, batching, or a multi-step sequence make it reachable?
+- **Dust**: does it accumulate over many transactions, or at realistic TVL?
+- **Speculative**: can a concrete trace be built now?
+
+Rejections based on a quoted blocking line (Gate A), a math-bounds proof, or a language guarantee are not revisited; those rejections are reliable. A revived record does **not** become `confirmed`: it goes through a fresh skeptic again, or, if it cannot be settled, it is reported under *Worth manual review* (see `reporting.md`) with the revival reason. This keeps the confirmed list precise without silently discarding real issues.
 
 ## Verify-only mode
 

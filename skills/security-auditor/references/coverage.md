@@ -67,7 +67,19 @@ Mandatory units: every `enforced: no` invariant, every `nothing found` assumptio
 
 ## Ranking
 
-Assign `priority` (1 = first):
+First compute a deterministic **risk score** per file, so ranking does not depend on judgment:
+
+```
+risk = 5·external_calls + 4·state_writing_functions + 4·payable_or_value_handlers
+     + 6·assembly_or_unsafe_blocks + 3·unchecked_blocks + 0.05·LOC
+     + 15 if novel (not a known fork or library copy)
+     + 10 if it holds or moves value or credentials
+     + 10 if immature (recent, low test coverage, many late changes in git signals)
+```
+
+Count these with `rg` and the entry-point scan. Equivalents in other stacks: external calls means network/IPC/FFI calls; value handlers means auth, payment, or secret-handling endpoints; `unsafe`/`unsafe {}`/inline assembly for assembly. Put the top 5 files in **tier 1** (all selected lenses, per-component pass, deep profile treatment), the next 10 in **tier 2** (standard), and the rest in **tier 3** (core lenses and heuristic triggers only). Record the score on each unit.
+
+Then assign `priority` (1 = first):
 
 1. Unauthenticated or permissionless surfaces before authenticated ones.
 2. Boundaries protecting the most value: credentials, cross-tenant data, code execution, user funds, mint/upgrade/ownership authority, release signing.

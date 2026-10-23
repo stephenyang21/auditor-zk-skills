@@ -23,6 +23,21 @@ Always work on a disposable copy under `<out>/scratch/<agent>/`, never on the ta
 
 A proof's output must name the effect in its own terms: an assertion message, a sanitizer line, a printed delta. "Test passed" alone is not evidence.
 
+**Assert the harm, not the mechanism.** "The function can be called", "the state can be reached", or "the path exists" proves nothing. The assertion must be the impact premise from `verification.md`: the victim's balance drops by X, the attacker's balance rises by at least Y funded by the pool, tenant B's request returns tenant A's record, the honest user's withdrawal reverts.
+
+## Defect-mutation check (required before `confirmed`)
+
+A passing proof written by the same reasoning that produced the finding can quietly build a world where the finding is true. Pin it to the defect:
+
+1. **Correct the defect, not the fix.** In the scratch copy, change only the defective line or lines to their correct form: the missing check added, the wrong constant corrected, `<` made `<=`, the skipped state write restored. This is the smallest semantic inverse of the defect. Ignore the recommended remediation.
+2. **Re-run the identical proof, unchanged.**
+3. **Read the result.**
+   - The proof now fails or reverts → it is **pinned**: the cited defect causes the effect. Record this as part of the observed result.
+   - The proof still passes → it is **not pinned**: the harness produces the effect independently of the cited line. Do not confirm. Re-examine the root cause; if it cannot be pinned, the record is `needs_validation` with the blocker "proof not pinned to the cited defect".
+4. **Optionally, check the fix.** Apply the proposed remediation separately and re-run. If it does not stop the proof, the remediation is wrong, but that says nothing about whether the bug is real.
+
+When the correct form of the line is unclear, say so and record why the check could not run.
+
 ## Where a proof stops
 
 - At the first observation that demonstrates the effect: one dummy record, one wrong value, one balance delta.

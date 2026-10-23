@@ -62,17 +62,17 @@ Follow `coverage.md`. Seed `<out>/coverage.json`: one unit per material combinat
 
 ### Step 3 — Hunt
 
-Follow `hunting.md`. Launch hunter waves from the ranked units. Each hunter receives `ARCHITECTURE.md`, its units with their context excerpts, the full text of its selected lens blocks, the hunter method, and the result contract, and returns one JSON result. After each wave, update `coverage.json`, run the checker, and launch one fresh **coverage critic**. Re-queue the missing or weakly closed units it names. Repeat until a critic pass is clean, or until the profile or budget stops you, and record the stop reason.
+Follow `hunting.md`. Launch hunter waves from the ranked units. Each hunter receives `ARCHITECTURE.md`, its units with their context excerpts, the full text of its selected lens blocks, the hunter method, and the result contract, and returns one JSON result. After each wave, update `coverage.json`, run the checker, and launch one fresh **coverage critic**. Re-queue the missing or weakly closed units it names. Repeat until a critic pass is clean, or until the profile or budget stops you, and record the stop reason. Under `standard` and `deep`, finish with the per-component pass (`hunting.md`), one hunter per component cluster at maximum depth, so depth is not spread across the whole codebase.
 
 **Done when** no unit is `planned`, the last critic pass is clean or its stop is recorded, and every candidate has a stable fingerprint.
 
 ### Step 4 — Verify
 
-Follow `verification.md` and `proof.md`. Deduplicate candidates by fingerprint and then by root cause. Give each unique candidate, and every carried prior finding, to a fresh **skeptic** that did not hunt it. The skeptic restates the claim, applies the triage brocards, runs the gates, attempts the minimum local proof, and returns one record. Then check the rejected and needs_validation records for **chains**, where two weak records combine into one real attack, and send each chain through the same path.
+Follow `verification.md` and `proof.md`. Deduplicate candidates by fingerprint and then by root cause. Give each unique candidate, and every carried prior finding, to a fresh **skeptic** that did not hunt it. The skeptic restates the claim, applies the triage brocards, runs the gates, attempts the minimum local proof, and returns one record. Then check the rejected and needs_validation records for **chains**, where two weak records combine into one real attack, and send each chain through the same path. Finally run the **revival** review over rejections that may be over-kills (`verification.md` § Revival).
 
 Write all records to `<out>/findings.json` and run `node <skill-dir>/scripts/validate-findings.cjs <out>/findings.json` until it passes.
 
-**Done when** every candidate has exactly one record, the validator passes, and every `confirmed` record has a local observed result.
+**Done when** every candidate has exactly one record, the validator passes, every `confirmed` record has a local observed result that asserts harm and is pinned by the defect-mutation check, and the revival review is recorded.
 
 ### Step 5 — Hunt variants
 
@@ -92,15 +92,16 @@ Follow `reporting.md`. In `<out>/`, derive `REPORT.md`, `FINDINGS.md`, and `NEED
 |---|---|
 | `context.md` | Step 1: recon prompts, function context records, entry-point classification, invariant synthesis, git signals, domain routing |
 | `coverage.md` | Step 2: unit format, ranking, prior runs, critic contract, budget |
-| `hunting.md` | Step 3: hunter method (attacker mindset, reasoning tools), prompt template, result contract, passes |
+| `hunting.md` | Step 3: hunter method, mindsets, prompt template, result contract, per-component pass, passes |
 | `lenses-general.md` | Core classes for all software: injection, access control, logic, files, crypto, feature abuse, chains, sharp edges, insecure defaults, wildcard, obvious things |
-| `lenses-smart-contracts.md` | EVM/Solidity: 9 single-lens and 3 gap lenses, weird tokens, dimensional analysis, safe patterns |
+| `lenses-smart-contracts.md` | EVM/Solidity: single-lens lenses (incl. state coupling, token integration, dimensional analysis), 3 gap lenses, safe patterns, judging gates |
+| `evm-heuristics.md` | EVM mechanical sweeps, trigger heuristics, and protocol primers (DEX, lending, staking/governance, proxies, NFT/gaming, bridges, wallets/AA, vaults) |
 | `lenses-other-chains.md` | Solana, Cosmos/CosmWasm/IBC, Substrate, Cairo/Starknet, TON, Algorand |
 | `lenses-native-crypto.md` | C/C++ and Rust review cues, constant-time code, secret zeroization |
 | `lenses-zk.md` | Circom and ZK circuits: under-constraint, range, selector, binding |
 | `domains/*.md` | Deep classes for web/auth, client-side, cloud, supply chain, AI/LLM, RPC/messaging, resource exhaustion, data isolation, desktop/mobile/IPC, memory safety and binaries |
-| `verification.md` | Step 4: claim restatement, brocards, gates, false-positive checklist, severity, confidence |
-| `proof.md` | Local PoC rules, Foundry/unit/property/fuzz proofs, evidence capture |
+| `verification.md` | Step 4: claim restatement, impact premise, brocards, gates, false-positive checklist, severity, confidence, chains, revival |
+| `proof.md` | Evidence standard, harm assertions, defect-mutation check, property and fuzz proofs, evidence capture |
 | `variants.md` | Step 5: root cause → exact match → generalize one element at a time |
 | `diff-review.md` | PR and diff mode: risk triage, blast radius, removed checks, test gaps |
 | `reporting.md` | `findings.json` fields, report templates, finding language, readiness report |

@@ -1,0 +1,83 @@
+{
+  "name": "krait",
+  "version": "0.2.0",
+  "description": "Solidity security audit CLI powered by Claude. 100% precision across 50 blind Code4rena contests (v8).",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "krait": "dist/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZealynxSecurity/krait.git"
+  },
+  "homepage": "https://krait.zealynx.io",
+  "bugs": {
+    "url": "https://github.com/ZealynxSecurity/krait/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/ scripts/",
+    "format": "prettier --write src/",
+    "postinstall": "bash scripts/build-mcp.sh || true",
+    "mcp:build": "bash scripts/build-mcp.sh",
+    "mcp:rebuild": "bash scripts/build-mcp.sh --force",
+    "install:skills": "bash scripts/install.sh",
+    "shadow:regress": "tsx scripts/shadow-regress.ts"
+  },
+  "files": [
+    "dist",
+    "patterns",
+    "scripts",
+    "mcp-servers/solodit/src",
+    "mcp-servers/solodit/package.json",
+    "mcp-servers/solodit/tsconfig.json",
+    "mcp-servers/forge/src",
+    "mcp-servers/forge/package.json",
+    "mcp-servers/forge/tsconfig.json",
+    ".claude/commands",
+    ".claude/skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "security",
+    "audit",
+    "solidity",
+    "smart-contracts",
+    "ethereum",
+    "defi",
+    "ai",
+    "claude",
+    "claude-code",
+    "vulnerability",
+    "web3"
+  ],
+  "author": "Zealynx Security",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "glob": "^11.0.1",
+    "js-yaml": "^4.1.0",
+    "ora": "^8.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.5",
+    "eslint": "^9.21.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^3.0.7"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

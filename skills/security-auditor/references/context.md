@@ -92,7 +92,7 @@ Select a lens or domain file because recon found the boundary it describes, not 
 | Native apps, deep links, exported components, daemons, local IPC | `domains/desktop-mobile-and-local-ipc.md` |
 | C/C++/unsafe Rust, parsers, FFI, kernels, firmware, JITs | `domains/memory-safety-and-binary.md` + `lenses-native-crypto.md` |
 | Cryptographic code, secret handling | `lenses-native-crypto.md` |
-| Solidity/Vyper/EVM | `lenses-smart-contracts.md` |
+| Solidity/Vyper/EVM | `lenses-smart-contracts.md` + `evm-heuristics.md` (mechanical sweeps, triggers, and the primer for the protocol class) |
 | Solana, Cosmos, Substrate, Cairo, TON, Algorand | `lenses-other-chains.md` (+ `lenses-smart-contracts.md` for economic and math lenses) |
 | Circom or other ZK circuits | `lenses-zk.md` |
 
