@@ -4,6 +4,7 @@ Security-audit skills for coding agents (Claude Code, Codex and similar), coveri
 
 | Skill | What it does |
 |---|---|
+| [`security-auditor`](skills/security-auditor/) | **Recommended.** One skill that takes the best of all three sources. Cloudflare provides the workflow (coverage plan, critic waves, three verdicts, validated `findings.json`). Pashov provides the attacker mindset, the 12 smart-contract lenses, the judging gates and invariant mapping. Trail of Bits provides function-level context, the false-positive procedure and triage brocards, variant hunting, diff review, weird tokens, unit-mismatch checks, non-EVM chains, and C/Rust/crypto checks. Modes: full audit, PR/diff review, verify a finding, find variants, pre-audit map. CC BY-SA 4.0. |
 | [`unified-security-audit`](skills/unified-security-audit/) | Cloudflare's six-phase audit workflow (recon, coverage-ledger hunting, independent validation, schema-checked `findings.json`, verification, reports) plus Pashov Audit Group's Solidity expertise: 12 hacking-agent attack classes and judging gates, `x-ray` pre-audit recon, and `fizz` Echidna/Medusa fuzzing. |
 | [`circom-auditor`](skills/circom-auditor/) | Circom circuit review for soundness, completeness, privacy and constraint bugs, using a 17-agent parallel workflow or a local single-agent pass. |
 
@@ -76,6 +77,12 @@ On older versions, add the marketplace first, then install:
 /plugin install auditor-zk-skills@auditor-zk-skills
 ```
 
+To add the combined `security-auditor` skill on its own:
+
+```
+/plugin install security-auditor --marketplace stephenyang21/auditor-zk-skills
+```
+
 To add a Trail of Bits plugin, use its name from the table above:
 
 ```
@@ -101,6 +108,7 @@ git clone https://github.com/stephenyang21/auditor-zk-skills.git
 mkdir -p ~/.claude/skills
 ln -s "$PWD/auditor-zk-skills/skills/unified-security-audit" ~/.claude/skills/unified-security-audit
 ln -s "$PWD/auditor-zk-skills/skills/circom-auditor" ~/.claude/skills/circom-auditor
+ln -s "$PWD/auditor-zk-skills/skills/security-auditor" ~/.claude/skills/security-auditor
 ```
 
 To link every Trail of Bits skill as well (each plugin keeps its skills under `plugins/<name>/skills/`):
@@ -131,6 +139,7 @@ cp -R /path/to/auditor-zk-skills/skills/* .claude/skills/
    cd auditor-zk-skills/skills
    zip -r unified-security-audit.zip unified-security-audit
    zip -r circom-auditor.zip circom-auditor
+   zip -r security-auditor.zip security-auditor
    # a Trail of Bits skill, e.g. fp-check:
    cd ../third_party/trailofbits/plugins/fp-check/skills && zip -r ~/fp-check.zip fp-check
    ```
@@ -164,7 +173,8 @@ node validate-findings.test.cjs && node validate-coverage-ledger.test.cjs
 
 This repository has two licences:
 
-- `skills/` and the repository's own files are **MIT** (see [`LICENSE`](LICENSE)). `unified-security-audit` builds on [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) and [pashov/skills](https://github.com/pashov/skills), both MIT. Credits and changes are in [`skills/unified-security-audit/NOTICE.md`](skills/unified-security-audit/NOTICE.md).
+- `skills/security-auditor/` is **CC BY-SA 4.0**, because it adapts Trail of Bits material. See its [`NOTICE.md`](skills/security-auditor/NOTICE.md) for sources.
+- The other skills under `skills/` and the repository's own files are **MIT** (see [`LICENSE`](LICENSE)). `unified-security-audit` builds on [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) and [pashov/skills](https://github.com/pashov/skills), both MIT. Credits and changes are in [`skills/unified-security-audit/NOTICE.md`](skills/unified-security-audit/NOTICE.md).
 - `third_party/trailofbits/` is © Trail of Bits, **CC BY-SA 4.0** (see [`third_party/trailofbits/LICENSE`](third_party/trailofbits/LICENSE)). It is copied unmodified. If you change and share these files, the changes must also be CC BY-SA 4.0.
 
 See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the upstream commits.

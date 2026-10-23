@@ -8,15 +8,26 @@
   },
   "plugins": [
     {
-      "name": "auditor-zk-skills",
-      "description": "unified-security-audit (Cloudflare workflow + Pashov Solidity agents, x-ray, fizz) and circom-auditor",
+      "name": "security-auditor",
+      "description": "Best-of audit skill combining Cloudflare's workflow, Pashov's attacker lenses and judging, and Trail of Bits' verification, variant, diff and platform methods, for codebases, smart contracts, other chains and ZK circuits",
       "source": "./",
       "strict": false,
       "skills": [
+        "./skills/security-auditor"
+      ],
+      "license": "CC-BY-SA-4.0"
+    },
+    {
+      "name": "auditor-zk-skills",
+      "description": "security-auditor (best-of combined), unified-security-audit (Cloudflare workflow + Pashov Solidity agents, x-ray, fizz) and circom-auditor",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/security-auditor",
         "./skills/unified-security-audit",
         "./skills/circom-auditor"
       ],
-      "license": "MIT"
+      "license": "MIT AND CC-BY-SA-4.0"
     },
     {
       "name": "audit-context-building",
